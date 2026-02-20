@@ -114,6 +114,44 @@
         </div>
       </div>
 
+      <!-- 人设库 -->
+      <div class="preset-section">
+        <div class="preset-row">
+          <select
+            v-model="selectedPresetName"
+            class="preset-select"
+            :disabled="isSubmitting"
+          >
+            <option value="">— 选择已保存设定 —</option>
+            <option v-for="p in presets" :key="p.name" :value="p.name">{{ p.name }}</option>
+          </select>
+          <button
+            class="preset-btn"
+            :disabled="isSubmitting || !selectedPresetName"
+            @click="loadPreset"
+          >载入</button>
+          <button
+            class="preset-btn preset-btn--danger"
+            :disabled="isSubmitting || !selectedPresetName"
+            @click="deletePreset"
+          >删除</button>
+        </div>
+        <div class="preset-row">
+          <input
+            v-model="savePresetName"
+            class="field-input"
+            type="text"
+            placeholder="输入设定名称…"
+            :disabled="isSubmitting"
+          />
+          <button
+            class="preset-btn preset-btn--save"
+            :disabled="isSubmitting || !savePresetName.trim()"
+            @click="savePreset"
+          >保存当前设定</button>
+        </div>
+      </div>
+
       <!-- 提交按钮 -->
       <div class="form-footer">
         <button class="submit-btn" :disabled="isSubmitting" @click="handleSubmit">
@@ -132,17 +170,32 @@
 <script setup lang="ts">
 // ── 常量 ──────────────────────────────────────────────────────────────────
 const CHAT_VAR_KEY = 'starter_character_created';
+const PRESETS_STORAGE_KEY = 'tavern_character_presets';
+
+// ── 人设预设类型 ───────────────────────────────────────────────────────────
+type FormData = {
+  name: string;
+  gender: '' | '男' | '女' | '扶她' | '男娘';
+  race: string;
+  age: string;
+  appearance: string;
+  traits: string;
+  background: string;
+};
+
+type Preset = { name: string; form: FormData };
 
 const genderOptions = [
   { label: '男', value: '男' },
   { label: '女', value: '女' },
-  { label: '随机', value: '' },
+  { label: '扶她', value: '扶她' },
+  { label: '男娘', value: '男娘' },
 ] as const;
 
 // ── 状态 ──────────────────────────────────────────────────────────────────
 const form = ref({
   name: '',
-  gender: '' as '' | '男' | '女',
+  gender: '' as '' | '男' | '女' | '扶她' | '男娘',
   race: '',
   age: '',
   appearance: '',
@@ -153,6 +206,11 @@ const form = ref({
 const isSubmitting = ref(false);
 const submitted = ref(false);
 
+// ── 人设预设状态 ───────────────────────────────────────────────────────────
+const presets = ref<Preset[]>([]);
+const selectedPresetName = ref('');
+const savePresetName = ref('');
+
 // ── 初始化：检查是否已创建过 ────────────────────────────────────────────
 onMounted(() => {
   const vars = getVariables({ type: 'chat' }) as Record<string, unknown>;
@@ -161,7 +219,38 @@ onMounted(() => {
     if (saved) form.value = saved;
     submitted.value = true;
   }
+  // 加载本地存储的人设预设
+  try {
+    const raw = localStorage.getItem(PRESETS_STORAGE_KEY);
+    presets.value = raw ? JSON.parse(raw) : [];
+  } catch {
+    presets.value = [];
+  }
 });
+
+// ── 人设预设操作 ───────────────────────────────────────────────────────────
+function savePreset() {
+  const name = savePresetName.value.trim();
+  if (!name) return;
+  const idx = presets.value.findIndex(p => p.name === name);
+  const entry: Preset = { name, form: { ...form.value } };
+  if (idx >= 0) presets.value[idx] = entry;
+  else presets.value.push(entry);
+  localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets.value));
+  selectedPresetName.value = name;
+  savePresetName.value = '';
+}
+
+function loadPreset() {
+  const preset = presets.value.find(p => p.name === selectedPresetName.value);
+  if (preset) form.value = { ...preset.form };
+}
+
+function deletePreset() {
+  presets.value = presets.value.filter(p => p.name !== selectedPresetName.value);
+  localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets.value));
+  selectedPresetName.value = '';
+}
 
 // ── 摘要显示字段（仅非空） ───────────────────────────────────────────────
 const summaryFields = computed(() => {
@@ -463,6 +552,99 @@ async function handleSubmit() {
   &:disabled {
     opacity: 0.4;
     cursor: not-allowed;
+  }
+}
+
+// ── 人设库 ────────────────────────────────────────────────────────────────
+.preset-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  background: var(--bg-panel);
+}
+
+.preset-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.preset-select {
+  flex: 1;
+  background: var(--bg-field);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: #ccffcc;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  padding: 5px 8px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+
+  &:focus {
+    border-color: var(--border-hover);
+    box-shadow: 0 0 6px var(--green-glow);
+  }
+
+  option {
+    background: #0a0a0a;
+    color: #ccffcc;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+.preset-btn {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: rgba(0, 255, 65, 0.7);
+  font-family: var(--font);
+  font-weight: 700;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+
+  &:hover:not(:disabled) {
+    border-color: var(--green);
+    color: var(--green);
+    background: rgba(0, 255, 65, 0.07);
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  &--save {
+    border-color: rgba(0, 255, 65, 0.6);
+    color: var(--green);
+  }
+
+  &--save:hover:not(:disabled) {
+    background: rgba(0, 255, 65, 0.12);
+    box-shadow: 0 0 6px var(--green-glow);
+  }
+
+  &--danger {
+    border-color: rgba(255, 60, 60, 0.4);
+    color: rgba(255, 100, 100, 0.7);
+  }
+
+  &--danger:hover:not(:disabled) {
+    border-color: rgba(255, 60, 60, 0.8);
+    color: #ff6464;
+    background: rgba(255, 60, 60, 0.08);
   }
 }
 
